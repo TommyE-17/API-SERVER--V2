@@ -1,6 +1,5 @@
 const utilities = require('./utilities');
 const Response = require("./response");
-const Endpoints = require('./endpoints');
 
 // this function extract the JSON data from the body of the request
 // and and pass it to controller Method
@@ -28,23 +27,18 @@ function processJSONBody(req, res, controller, methodName) {
 exports.dispatch_TOKEN_EndPoint = function(req, res){
     let response = new Response(res);
     let url = utilities.removeQueryString(req.url);
-    if (url =='/token'){
+    if (url =='/token' && req.method == "POST") {""
         try{
             // dynamically import the targeted controller
             // if the controller does not exist the catch section will be called
             const Controller = require('./controllers/AccountsController');
             // instanciate the controller       
             let controller =  new Controller(req, res);
-            if (req.method === 'POST')
-                processJSONBody(req, res, controller, 'login');
-            else {
-                response.notFound();
-            }
+            processJSONBody(req, res, controller, 'login');
             // request consumed
             return true;
-
         } catch(error){
-            // catch likely called because of missing controller class
+            // catch likely called because of missing AccountsController class
             // i.e. require('./' + controllerName) failed
             // but also any unhandled error...
             console.log('endpoint not found');
@@ -60,8 +54,6 @@ exports.dispatch_TOKEN_EndPoint = function(req, res){
 }
 
 // {method, ControllerName, Action}
-const RouteRegister = require('./routeRegister');
-const TokenManager = require('./tokenManager');
 exports.dispatch_Registered_EndPoint = function(req, res){
     const RouteRegister = require('./routeRegister');
     let response = new Response(res);
@@ -70,9 +62,10 @@ exports.dispatch_Registered_EndPoint = function(req, res){
         try{
             // dynamically import the targeted controller
             // if the controllerName does not exist the catch section will be called
-            const Controller = require('./controllers/' + utilities.capitalizeFirstLetter(route.modelName) + "Controller");// <<<-----
+            const Controller = require('./controllers/' + utilities.capitalizeFirstLetter(route.modelName) + "Controller");
             // instanciate the controller       
             let controller =  new Controller(req, res);
+
             if (!controller.requestAuthorized()){
                 console.log('unauthorized access!');
                 response.unAuthorized();
@@ -87,6 +80,7 @@ exports.dispatch_Registered_EndPoint = function(req, res){
             }
             // request consumed
             return true;
+
         } catch(error){
             // catch likely called because of missing controller class
             // i.e. require('./' + controllerName) failed
@@ -102,6 +96,7 @@ exports.dispatch_Registered_EndPoint = function(req, res){
     // request not consumed
     // must be handled by another middleware
     return false;
+
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -122,7 +117,15 @@ exports.dispatch_Registered_EndPoint = function(req, res){
 /////////////////////////////////////////////////////////////////////
 exports.dispatch_API_EndPoint = function(req, res){
     
+    function makeControllerName(modelName) {
+        if (modelName != undefined)
+            // by convention controller name -> NameController
+            return utilities.capitalizeFirstLetter(modelName) + 'Controller';
+        return undefined;
+    }
+
     if (req.url == "/api"){
+        const Endpoints = require('./endpoints');
         Endpoints.list(res);
         // request consumed
         return true;
@@ -131,15 +134,14 @@ exports.dispatch_API_EndPoint = function(req, res){
     let path = utilities.decomposePath(req.url);
     let controllerName = makeControllerName(path.model);
     let id = path.id;
-    let accessToken = req.headers.access_token;
 
     if (path.id != undefined) {
         if (isNaN(path.id)) {
+            response.badRequest();
             // request not consumed
             return false;
         }
     }
-
 
     if (controllerName != undefined) {
         let response = new Response(res);
@@ -150,7 +152,6 @@ exports.dispatch_API_EndPoint = function(req, res){
             // instanciate the controller       
             let controller =  new Controller(req, res);
             
-
             if (!controller.requestAuthorized()){
                 console.log('unauthorized access!');
                 response.unAuthorized();
@@ -162,12 +163,12 @@ exports.dispatch_API_EndPoint = function(req, res){
                 // request consumed
                 return true;
             }
-            if (req.method === 'POST' && TokenManager.find(accessToken) != null){
+            if (req.method === 'POST'){
                 processJSONBody(req, res, controller, "post");
                 // request consumed
                 return true;
             }
-            if (req.method === 'PUT' && TokenManager.find(accessToken) != null){
+            if (req.method === 'PUT'){
                 processJSONBody(req, res, controller, "put");
                 // request consumed
                 return true;
@@ -177,16 +178,10 @@ exports.dispatch_API_EndPoint = function(req, res){
                 // request consumed
                 return true;
             }
-            if (req.method === 'DELETE' && TokenManager.find(accessToken) != null) {
-                if (!isNaN(id))
-                    controller.remove(id);
-                else 
-                    response.badRequest();
+            if (req.method === 'DELETE') {
+                controller.remove(id);
                 // request consumed
                 return true;
-            }
-            else{
-                console.log("ERREUR")
             }
         } catch(error){
             // catch likely called because of missing controller class
